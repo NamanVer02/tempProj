@@ -1,15 +1,20 @@
-import os
-import json
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.responses import JSONResponse
 from PyPDF2 import PdfReader
 from langchain.chains import RetrievalQA
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores import FAISS
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
+import os
 
-def extract_resume_info(file_path):
+# Initialize FastAPI app
+app = FastAPI(title="Resume Extractor API", description="An API to extract resume information using LLMs.", version="1.0.0")
+
+# Function to extract resume info
+def extract_resume_info(file):
     # Step 1: Read the PDF and extract text
-    reader = PdfReader(file_path)
+    reader = PdfReader(file)
     formatted_document = []
     for page in reader.pages:
         formatted_document.append(page.extract_text())
@@ -62,26 +67,26 @@ def extract_resume_info(file_path):
     
     return resume_info
 
-# Main execution block
-if __name__ == "__main__":
-    # Specify the PDF file path
-    file_path = "Resume_SDE.pdf"  # Replace with the actual file path
+# API endpoint
+@app.post("/extract")
+async def extract_resume(file: UploadFile = File(...)):
+    """
+    Upload a PDF resume, and extract information such as job title, experience, tech stack, and more.
+    """
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+    
+    try:
+        # Extract resume information
+        resume_info = extract_resume_info(file.file)
+        return JSONResponse(content=resume_info, status_code=200)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing the file: {str(e)}")
 
-    if not os.path.exists(file_path):
-        print("Error: File not found. Please provide a valid PDF file path.")
-    else:
-        try:
-            # Extract resume information
-            extracted_info = extract_resume_info(file_path)
-            
-            # Print and save the output in JSON format
-            json_output = json.dumps(extracted_info, indent=4)
-            print(json_output)
-            
-            # Save to a file
-            output_file = "resume_info.json"
-            with open(output_file, "w") as f:
-                f.write(json_output)
-            print(f"Resume information saved to {output_file}.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
+# Health check endpoint
+@app.get("/")
+def health_check():
+    """
+    Health check for the API.
+    """
+    return {"status": "ok", "message": "Resume Extractor API is running!"}
